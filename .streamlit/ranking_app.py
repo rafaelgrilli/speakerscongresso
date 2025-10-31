@@ -49,16 +49,17 @@ THEME_MAP = {
 # --- CONFIGURAÇÃO E CONEXÃO FIREBASE ---
 
 def initialize_firebase():
-    """Inicializa o Firebase Admin SDK usando Streamlit Secrets de forma segura (imutável)."""
+    """Inicializa o Firebase Admin SDK usando Streamlit Secrets de forma segura."""
     if not firebase_admin._apps:
         try:
             # 1. Copia o dicionário de segredos para torná-lo MUTÁVEL
+            # O st.secrets["firestore"] contém todas as chaves do seu secrets.toml sob a seção [firestore]
             cred_dict = dict(st.secrets["firestore"])
             
-            # 2. Limpeza CRUCIAL da private_key
-            # O Streamlit armazena as chaves com \n literal. O Firebase precisa do caractere \n real.
+            # 2. Limpeza CRUCIAL da private_key para resolver o erro "Invalid private key"
+            # O Streamlit armazena a string com '\\n', o Firebase precisa de '\n' real.
             if isinstance(cred_dict.get('private_key'), str):
-                # O replace troca a string literal '\\n' pela quebra de linha real '\n'
+                # O replace troca a string literal '\\n' (duas barras) pela quebra de linha real '\n' (uma barra)
                 cleaned_key = cred_dict['private_key'].replace('\\n', '\n')
                 # A private_key corrigida é atribuída ao dicionário MUTÁVEL
                 cred_dict['private_key'] = cleaned_key
@@ -74,7 +75,9 @@ def initialize_firebase():
             )
             st.stop()
         except Exception as e:
-            st.error(f"Erro ao inicializar o Firebase: {e}") 
+            st.error(f"Erro ao inicializar o Firebase: Failed to initialize a certificate credential. "
+                     f"Causa: {e}. Por favor, verifique a formatação da private_key no secrets.toml."
+                     " A chave deve ser colada em uma única linha com '\\n' para as quebras de linha.") 
             st.stop()
     else:
         st.session_state.db = firestore.client()
