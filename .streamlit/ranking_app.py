@@ -49,20 +49,21 @@ THEME_MAP = {
 # --- CONFIGURAÇÃO E CONEXÃO FIREBASE ---
 
 def initialize_firebase():
-    """Inicializa o Firebase Admin SDK usando Streamlit Secrets."""
+    """Inicializa o Firebase Admin SDK usando Streamlit Secrets de forma segura (imutável)."""
     if not firebase_admin._apps:
         try:
-            # Pega o dicionário de credenciais da seção [firestore]
-            cred_dict = st.secrets["firestore"]
+            # 1. Copia o dicionário de segredos para torná-lo MUTÁVEL
+            cred_dict = dict(st.secrets["firestore"])
             
-            # Limpeza CRUCIAL: Substitui quebras de linha literais por quebras de linha reais.
-            # O Streamlit guarda a private_key com '\n' literal, mas o Firebase precisa do caractere real.
+            # 2. Limpeza CRUCIAL da private_key
+            # O Streamlit armazena as chaves com \n literal. O Firebase precisa do caractere \n real.
             if isinstance(cred_dict.get('private_key'), str):
+                # O replace troca a string literal '\\n' pela quebra de linha real '\n'
                 cleaned_key = cred_dict['private_key'].replace('\\n', '\n')
-                # A chave já tem o caractere de nova linha no início e fim por causa das aspas triplas no TOML
+                # A private_key corrigida é atribuída ao dicionário MUTÁVEL
                 cred_dict['private_key'] = cleaned_key
             
-            # O Streamlit transforma a seção [firestore] do TOML em um dicionário Python (o que o Firebase precisa).
+            # 3. Passa o dicionário limpo para o Firebase Admin SDK
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
