@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 import pandas as pd
 from typing import Dict, Any
+import json # Adicionado para processar o segredo do Firebase
 
 # --- DADOS INICIAIS (Estrutura de dados para o Firestore) ---
 INITIAL_SPEAKERS_DATA = {
@@ -52,18 +53,22 @@ def initialize_firebase():
     """Inicializa o Firebase Admin SDK usando Streamlit Secrets."""
     if not firebase_admin._apps:
         try:
-            # Tenta carregar as credenciais do Streamlit secrets
-            cred = credentials.Certificate(st.secrets["firestore"])
+            # Novo método para carregar o dicionário JSON inteiro do Streamlit Secrets
+            cred_dict = json.loads(st.secrets["firebase_service_account"])
+            
+            # O Admin SDK espera um dicionário JSON como argumento
+            cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
         except KeyError:
             st.error(
-                "Erro: As credenciais do Firebase não estão configuradas corretamente "
-                "no arquivo `.streamlit/secrets.toml`. Consulte o guia para configurar o `[firestore]`."
+                "Erro: A chave 'firebase_service_account' não foi encontrada. "
+                "Verifique se o seu `.streamlit/secrets.toml` está configurado com a chave única."
             )
             st.stop()
         except Exception as e:
-            st.error(f"Erro ao inicializar o Firebase: {e}")
+            # Este erro é o que estava ocorrendo, corrigido pela abordagem JSON.loads
+            st.error(f"Erro ao inicializar o Firebase: {e}") 
             st.stop()
     else:
         st.session_state.db = firestore.client()
@@ -161,8 +166,8 @@ def add_speaker_suggestion(db, user_id, name, theme, bio):
     get_votable_speakers.clear() 
     
     st.toast(f"Sugestão '{name}' adicionada e pronta para votação!")
-    # A atualização do st.session_state.speakers será feita na próxima execução do script
-    st.rerun() # Força a atualização da interface para exibir o novo palestrante
+    # Força a atualização da interface para exibir o novo palestrante
+    st.rerun() 
 
 # --- LÓGICA DE INTERFACE E ESTADO ---
 
@@ -193,7 +198,7 @@ def render_speaker_card(db, speaker_id, speaker):
         col1, col2 = st.columns([1, 3])
         
         with col1:
-            # LINHA CORRIGIDA: A caption agora é speaker['name'] para evitar o SyntaxError
+            # Correção do f-string: apenas o nome é usado como caption
             st.image(speaker.get("image"), use_column_width="always", caption=speaker['name'])
         
         with col2:
@@ -347,5 +352,6 @@ def main():
 
 if __name__ == "__main__":
     if 'db' not in st.session_state:
+        # A chamada a initialize_firebase define st.session_state.db
         initialize_firebase() 
     main()
