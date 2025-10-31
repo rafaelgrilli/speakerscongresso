@@ -182,8 +182,6 @@ def setup_session_state(db):
     else:
         st.session_state.my_rankings = {}
 
-# --- COMPONENTES DE UI ---
-
 def render_speaker_card(db, speaker_id, speaker):
     """Renderiza o cartão de palestrante com o slider de classificação."""
     current_rank = st.session_state.my_rankings.get(speaker_id, 1)
@@ -195,7 +193,8 @@ def render_speaker_card(db, speaker_id, speaker):
         col1, col2 = st.columns([1, 3])
         
         with col1:
-            st.image(speaker.get("image"), use_column_width="always", caption=f"}]")
+            # LINHA CORRIGIDA: A caption agora é speaker['name'] para evitar o SyntaxError
+            st.image(speaker.get("image"), use_column_width="always", caption=speaker['name'])
         
         with col2:
             st.caption("Resumo (Max 5 linhas)")
@@ -350,4 +349,3 @@ if __name__ == "__main__":
     if 'db' not in st.session_state:
         initialize_firebase() 
     main()
-
