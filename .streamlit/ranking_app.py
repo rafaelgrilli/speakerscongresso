@@ -7,7 +7,7 @@ import pandas as pd
 import json 
 from typing import Dict, Any
 
-# --- MÉTODOS AUXILIARES ---
+# --- MÉTODOS AUXILIARES E DADOS INICIAIS ---
 
 THEME_MAP = {
     "digital": "Transformação Digital & Indústria",
@@ -64,36 +64,17 @@ def initialize_firebase():
             if isinstance(cred_dict.get('private_key'), str):
                 private_key = cred_dict['private_key']
                 
-                # DEBUG: Mostra o estado original
-                st.sidebar.write("**DEBUG - Estado Original:**")
-                st.sidebar.write(f"Tamanho original: {len(private_key)} chars")
-                st.sidebar.write(f"Primeiros 50 chars: `{repr(private_key[:50])}`")
-                st.sidebar.write(f"Últimos 50 chars: `{repr(private_key[-50:])}`")
-                st.sidebar.write(f"Contém \\\\n: {('\\\\n' in private_key)}")
-                st.sidebar.write(f"Contém \\n real: {chr(10) in private_key}")
-                
-                # Remove possíveis aspas extras no início/fim
+                # Limpa aspas extras e variações de quebra de linha (correção essencial)
                 private_key = private_key.strip().strip('"').strip("'")
-                
-                # Substitui todas as variações de quebra de linha
                 private_key = private_key.replace('\\n', '\n')
-                private_key = private_key.replace('\\\\n', '\n')
+                private_key = private_key.replace('\\\\n', '\n') 
                 
-                # DEBUG: Mostra o estado após limpeza
-                st.sidebar.write("**DEBUG - Após Limpeza:**")
-                st.sidebar.write(f"Tamanho após limpeza: {len(private_key)} chars")
-                st.sidebar.write(f"Primeiros 50 chars: `{repr(private_key[:50])}`")
-                st.sidebar.write(f"Últimos 50 chars: `{repr(private_key[-50:])}`")
-                st.sidebar.write(f"Número de \\n reais: {private_key.count(chr(10))}")
-                
-                # Garante que começa e termina corretamente
+                # Garante que começa e termina corretamente (ajuste de MalformedFraming)
                 if not private_key.startswith('-----BEGIN'):
                     st.error("Chave privada não começa com '-----BEGIN PRIVATE KEY-----'")
                     st.stop()
-                if not private_key.endswith('-----'):
-                    st.warning("Chave não termina com '-----', adicionando...")
-                    private_key = private_key + '\n-----END PRIVATE KEY-----'
                 
+                # Atualiza o dicionário mutável
                 cred_dict['private_key'] = private_key
             
             # 3. Passa o dicionário limpo para o Firebase Admin SDK
@@ -111,12 +92,6 @@ def initialize_firebase():
         except Exception as e:
             st.error(f"Erro ao inicializar o Firebase: {e}")
             st.error(f"Tipo do erro: {type(e).__name__}")
-            
-            # Mostra informações adicionais
-            if 'private_key' in locals():
-                st.error(f"Tamanho final da chave: {len(private_key)} chars")
-                st.error(f"Linhas na chave: {private_key.count(chr(10)) + 1}")
-            
             st.stop()
     else:
         st.session_state.db = firestore.client()
@@ -282,9 +257,11 @@ def render_suggestion_form(_db):
             
             try:
                 _db.collection("all_votable_speakers").add(new_speaker)
-                st.success(f"Palestrante '{sug_name}' sugerido e adicionado à lista votável! Recarregue a página em 5s para ver o nome na lista.")
-                # Limpa o cache para forçar a atualização dos speakers em 5s (ttl=5)
+                st.success(f"Palestrante '{sug_name}' sugerido e adicionado à lista votável!")
+                
+                # CORREÇÃO DO BUG: Limpa o cache e força o re-run para exibir o novo speaker imediatamente
                 list_speakers.clear() 
+                st.rerun() # Força a re-execução do script
             except Exception as e:
                 st.error(f"Erro ao salvar sugestão: {e}")
         elif submitted:
@@ -330,6 +307,7 @@ def render_results(_db, speakers):
                 format="%.2f",
                 min_value=1,
                 max_value=10,
+                width="small"
             )
         }
     )
@@ -341,7 +319,7 @@ def main():
     st.set_page_config(
         page_title="Ranking de Keynotes", 
         layout="wide", 
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="collapsed"
     )
 
     # 1. Tenta inicializar o Firebase
@@ -350,9 +328,10 @@ def main():
         st.stop()
         
     # 2. Garante que os speakers iniciais existam
+    # O uso de uma função cache_data de 1 hora evita que essa checagem seja feita a cada 5s
     initialize_speakers_once(db)
     
-    # 3. Carrega a lista de speakers (cache de 5s)
+    # 3. Carrega a lista de speakers (cache de 5s para tempo real)
     speakers = list_speakers(db)
     
     # 4. Carrega os rankings do usuário atual (sem cache)
