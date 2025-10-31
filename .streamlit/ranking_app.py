@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 import pandas as pd
 from typing import Dict, Any
-import json # Adicionado para processar o segredo do Firebase
+import json 
 
 # --- DADOS INICIAIS (Estrutura de dados para o Firestore) ---
 INITIAL_SPEAKERS_DATA = {
@@ -53,10 +53,19 @@ def initialize_firebase():
     """Inicializa o Firebase Admin SDK usando Streamlit Secrets."""
     if not firebase_admin._apps:
         try:
-            # Novo método para carregar o dicionário JSON inteiro do Streamlit Secrets
-            cred_dict = json.loads(st.secrets["firebase_service_account"])
+            # 1. Carrega a string JSON do secrets
+            cred_string = st.secrets["firebase_service_account"]
             
-            # O Admin SDK espera um dicionário JSON como argumento
+            # 2. Converte a string JSON em dicionário Python
+            cred_dict = json.loads(cred_string)
+            
+            # 3. Limpa a private_key para remover quaisquer caracteres de controle problemáticos
+            # Isso é crucial: Substitui \n por quebra de linha real (se a string não for RAW) e remove lixos.
+            if isinstance(cred_dict.get('private_key'), str):
+                cleaned_key = cred_dict['private_key'].replace('\\n', '\n')
+                cred_dict['private_key'] = cleaned_key
+            
+            # 4. Passa o dicionário limpo para o Firebase Admin SDK
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
@@ -67,7 +76,7 @@ def initialize_firebase():
             )
             st.stop()
         except Exception as e:
-            # Este erro é o que estava ocorrendo, corrigido pela abordagem JSON.loads
+            # Captura o erro, especialmente se for erro de parsing de JSON/caractere de controle
             st.error(f"Erro ao inicializar o Firebase: {e}") 
             st.stop()
     else:
@@ -198,7 +207,6 @@ def render_speaker_card(db, speaker_id, speaker):
         col1, col2 = st.columns([1, 3])
         
         with col1:
-            # Correção do f-string: apenas o nome é usado como caption
             st.image(speaker.get("image"), use_column_width="always", caption=speaker['name'])
         
         with col2:
@@ -352,6 +360,5 @@ def main():
 
 if __name__ == "__main__":
     if 'db' not in st.session_state:
-        # A chamada a initialize_firebase define st.session_state.db
         initialize_firebase() 
     main()
