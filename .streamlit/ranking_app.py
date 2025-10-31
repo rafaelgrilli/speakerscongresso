@@ -64,6 +64,14 @@ def initialize_firebase():
             if isinstance(cred_dict.get('private_key'), str):
                 private_key = cred_dict['private_key']
                 
+                # DEBUG: Mostra o estado original
+                st.sidebar.write("**DEBUG - Estado Original:**")
+                st.sidebar.write(f"Tamanho original: {len(private_key)} chars")
+                st.sidebar.write(f"Primeiros 50 chars: `{repr(private_key[:50])}`")
+                st.sidebar.write(f"Últimos 50 chars: `{repr(private_key[-50:])}`")
+                st.sidebar.write(f"Contém \\\\n: {('\\\\n' in private_key)}")
+                st.sidebar.write(f"Contém \\n real: {chr(10) in private_key}")
+                
                 # Remove possíveis aspas extras no início/fim
                 private_key = private_key.strip().strip('"').strip("'")
                 
@@ -71,11 +79,19 @@ def initialize_firebase():
                 private_key = private_key.replace('\\n', '\n')
                 private_key = private_key.replace('\\\\n', '\n')
                 
+                # DEBUG: Mostra o estado após limpeza
+                st.sidebar.write("**DEBUG - Após Limpeza:**")
+                st.sidebar.write(f"Tamanho após limpeza: {len(private_key)} chars")
+                st.sidebar.write(f"Primeiros 50 chars: `{repr(private_key[:50])}`")
+                st.sidebar.write(f"Últimos 50 chars: `{repr(private_key[-50:])}`")
+                st.sidebar.write(f"Número de \\n reais: {private_key.count(chr(10))}")
+                
                 # Garante que começa e termina corretamente
                 if not private_key.startswith('-----BEGIN'):
                     st.error("Chave privada não começa com '-----BEGIN PRIVATE KEY-----'")
                     st.stop()
                 if not private_key.endswith('-----'):
+                    st.warning("Chave não termina com '-----', adicionando...")
                     private_key = private_key + '\n-----END PRIVATE KEY-----'
                 
                 cred_dict['private_key'] = private_key
@@ -84,6 +100,7 @@ def initialize_firebase():
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
+            st.success("✅ Firebase inicializado com sucesso!")
             
         except KeyError:
             st.error(
@@ -94,6 +111,12 @@ def initialize_firebase():
         except Exception as e:
             st.error(f"Erro ao inicializar o Firebase: {e}")
             st.error(f"Tipo do erro: {type(e).__name__}")
+            
+            # Mostra informações adicionais
+            if 'private_key' in locals():
+                st.error(f"Tamanho final da chave: {len(private_key)} chars")
+                st.error(f"Linhas na chave: {private_key.count(chr(10)) + 1}")
+            
             st.stop()
     else:
         st.session_state.db = firestore.client()
