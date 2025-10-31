@@ -58,21 +58,33 @@ def initialize_firebase():
     if not firebase_admin._apps:
         try:
             # 1. Copia o dicionário de segredos para torná-lo MUTÁVEL
-            # Usa o nome da chave configurado: "firestore"
             cred_dict = dict(st.secrets["firestore"])
             
-            # 2. Limpeza CRUCIAL da private_key para resolver o MalformedFraming
-            # O Streamlit armazena '\n' como '\\n' no TOML; o Firebase precisa do '\n' real.
+            # 2. Limpeza ROBUSTA da private_key
             if isinstance(cred_dict.get('private_key'), str):
-                # Substitui '\\n' (string) por '\n' (caractere de nova linha)
-                cleaned_key = cred_dict['private_key'].replace('\\n', '\n')
-                # A chave 'private_key' só pode ser definida em um objeto mutável (a cópia)
-                cred_dict['private_key'] = cleaned_key
+                private_key = cred_dict['private_key']
+                
+                # Remove possíveis aspas extras no início/fim
+                private_key = private_key.strip().strip('"').strip("'")
+                
+                # Substitui todas as variações de quebra de linha
+                private_key = private_key.replace('\\n', '\n')
+                private_key = private_key.replace('\\\\n', '\n')
+                
+                # Garante que começa e termina corretamente
+                if not private_key.startswith('-----BEGIN'):
+                    st.error("Chave privada não começa com '-----BEGIN PRIVATE KEY-----'")
+                    st.stop()
+                if not private_key.endswith('-----'):
+                    private_key = private_key + '\n-----END PRIVATE KEY-----'
+                
+                cred_dict['private_key'] = private_key
             
             # 3. Passa o dicionário limpo para o Firebase Admin SDK
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
+            
         except KeyError:
             st.error(
                 "Erro: A chave 'firestore' não foi encontrada. "
@@ -80,12 +92,12 @@ def initialize_firebase():
             )
             st.stop()
         except Exception as e:
-            # Este erro captura MalformedFraming ou Invalid private key
-            st.error(f"Erro ao inicializar o Firebase: {e}. "
-                     f"Por favor, verifique a formatação da private_key. Ela deve estar no formato PEM com aspas triplas ou escapar '\\n' se em linha única.") 
+            st.error(f"Erro ao inicializar o Firebase: {e}")
+            st.error(f"Tipo do erro: {type(e).__name__}")
             st.stop()
     else:
         st.session_state.db = firestore.client()
+    
     return st.session_state.db
 
 # --- LÓGICA DE DADOS (CRIAÇÃO E RECUPERAÇÃO) ---
@@ -161,6 +173,24 @@ def calculate_aggregated_results(_db):
                 all_rankings[speaker_id]["count"] += 1
                 
     return all_rankings, total_voters
+
+def load_user_rankings_from_db(_db, user_id):
+    """Carrega os rankings do usuário atual para o estado da sessão."""
+    if st.session_state.my_rankings and st.session_state.my_rankings.get('loaded', False):
+        return
+        
+    doc_ref = _db.collection("keynote_rankings").document(user_id)
+    try:
+        doc = doc_ref.get()
+        if doc.exists:
+            st.session_state.my_rankings = doc.to_dict()
+            st.session_state.my_rankings['loaded'] = True
+        else:
+            st.session_state.my_rankings = {'loaded': True}
+    except Exception as e:
+        # Erro de leitura, mas não fatal para a aplicação
+        print(f"Erro ao carregar rankings do usuário: {e}")
+        st.session_state.my_rankings = {'loaded': True}
 
 # --- COMPONENTES DE UI ---
 
@@ -351,25 +381,6 @@ def main():
     # Renderiza a aba "Sugestão"
     with tabs[4]:
         render_suggestion_form(db)
-
-# --- LÓGICA DE RANKING DO USUÁRIO ---
-def load_user_rankings_from_db(_db, user_id):
-    """Carrega os rankings do usuário atual para o estado da sessão."""
-    if st.session_state.my_rankings and st.session_state.my_rankings.get('loaded', False):
-        return
-        
-    doc_ref = _db.collection("keynote_rankings").document(user_id)
-    try:
-        doc = doc_ref.get()
-        if doc.exists:
-            st.session_state.my_rankings = doc.to_dict()
-            st.session_state.my_rankings['loaded'] = True
-        else:
-            st.session_state.my_rankings = {'loaded': True}
-    except Exception as e:
-        # Erro de leitura, mas não fatal para a aplicação
-        print(f"Erro ao carregar rankings do usuário: {e}")
-        st.session_state.my_rankings = {'loaded': True}
 
 
 if __name__ == "__main__":
