@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime
 import pandas as pd
 from typing import Dict, Any
-import json 
 
 # --- DADOS INICIAIS (Estrutura de dados para o Firestore) ---
 INITIAL_SPEAKERS_DATA = {
@@ -53,30 +52,27 @@ def initialize_firebase():
     """Inicializa o Firebase Admin SDK usando Streamlit Secrets."""
     if not firebase_admin._apps:
         try:
-            # 1. Carrega a string JSON do secrets
-            cred_string = st.secrets["firebase_service_account"]
+            # Pega o dicionário de credenciais da seção [firestore]
+            cred_dict = st.secrets["firestore"]
             
-            # 2. Converte a string JSON em dicionário Python
-            cred_dict = json.loads(cred_string)
-            
-            # 3. Limpa a private_key para remover quaisquer caracteres de controle problemáticos
-            # Isso é crucial: Substitui \n por quebra de linha real (se a string não for RAW) e remove lixos.
+            # Limpeza CRUCIAL: Substitui quebras de linha literais por quebras de linha reais.
+            # O Streamlit guarda a private_key com '\n' literal, mas o Firebase precisa do caractere real.
             if isinstance(cred_dict.get('private_key'), str):
                 cleaned_key = cred_dict['private_key'].replace('\\n', '\n')
+                # A chave já tem o caractere de nova linha no início e fim por causa das aspas triplas no TOML
                 cred_dict['private_key'] = cleaned_key
             
-            # 4. Passa o dicionário limpo para o Firebase Admin SDK
+            # O Streamlit transforma a seção [firestore] do TOML em um dicionário Python (o que o Firebase precisa).
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             st.session_state.db = firestore.client()
         except KeyError:
             st.error(
-                "Erro: A chave 'firebase_service_account' não foi encontrada. "
-                "Verifique se o seu `.streamlit/secrets.toml` está configurado com a chave única."
+                "Erro: A chave 'firestore' não foi encontrada. "
+                "Verifique se o seu `.streamlit/secrets.toml` está configurado com a seção [firestore]."
             )
             st.stop()
         except Exception as e:
-            # Captura o erro, especialmente se for erro de parsing de JSON/caractere de controle
             st.error(f"Erro ao inicializar o Firebase: {e}") 
             st.stop()
     else:
